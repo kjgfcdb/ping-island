@@ -8,6 +8,7 @@
 
 import AppKit
 import Combine
+import Darwin
 import Foundation
 import os.log
 
@@ -66,7 +67,6 @@ actor SessionStore {
     private let codexHookPlaceholderPruneDelayNs: UInt64 = 10_000_000_000
     private let codexAppServerPlaceholderPruneDelayNs: UInt64 = 60_000_000_000
     private let codexContinuationMergeWindow: TimeInterval = 10 * 60
-    private let apparentIdleProcessingGraceWindow: TimeInterval = 5 * 60
     private let qoderConversationPollIntervalNs: UInt64 = 250_000_000
     private let qoderConversationPollTimeoutNs: UInt64 = 120_000_000_000
     private let qoderSubagentAssociationWindow: TimeInterval = 2 * 60
@@ -303,8 +303,10 @@ actor SessionStore {
         // race where a Stop event runs during a Notification's await, ends its own
         // fresh copy, and then the Notification resumes against an already-ended
         // session.
-        if sessions[sessionId] == nil {
+        let isNewSession = sessions[sessionId] == nil
+        if isNewSession {
             sessions[sessionId] = session
+            endOrphanedSessions(sameProviderAs: session, newSessionId: sessionId)
         }
 
         let tree = (event.pid != nil || event.tty != nil) ? ProcessTreeBuilder.shared.buildTree() : [:]
@@ -1689,13 +1691,7 @@ actor SessionStore {
     ) -> Bool {
         guard session.phase.isActive else { return false }
         guard incomingPhase == .idle else { return false }
-
-        if sessionHasLiveExecutionEvidence(session) {
-            return true
-        }
-
-        guard let previousLastActivity else { return false }
-        return referenceDate.timeIntervalSince(previousLastActivity) < apparentIdleProcessingGraceWindow
+        return sessionHasLiveExecutionEvidence(session)
     }
 
     private func sessionHasLiveExecutionEvidence(_ session: SessionState) -> Bool {
@@ -2107,6 +2103,82 @@ actor SessionStore {
             cancelPendingSync(sessionId: childSessionId)
             cancelPendingCodexPlaceholderPrune(sessionId: childSessionId)
             cancelPendingQoderConversationPoll(sessionId: childSessionId)
+        }
+    }
+
+    /// When a new session starts for a provider, archive any active sessions from the
+    /// same provider + cwd that look orphaned (process died without sending Stop).
+    /// This prevents duplicate-looking sessions in the expanded list when the user
+    /// quits and restarts Claude in the same project.
+    private func endOrphanedSessions(
+        sameProviderAs session: SessionState,
+        newSessionId: String
+    ) {
+        let provider = session.provider
+        let cwd = session.cwd
+        guard !cwd.isEmpty else { return }
+        guard provider == .claude else { return }
+        guard session.ingress != .nativeRuntime else { return }
+
+        var idsToArchive: [String] = []
+        for (existingId, existing) in sessions {
+            guard existingId != newSessionId else { continue }
+            guard existing.provider == provider else { continue }
+            guard existing.cwd == cwd else { continue }
+            guard existing.phase != .ended else { continue }
+            guard !existing.needsManualAttention else { continue }
+
+            // Don't archive a session that still has live execution evidence
+            // (running tools or thinking in progress) — it may be a legitimate
+            // concurrent instance, like a Qoder parent session with a child.
+            if sessionHasLiveExecutionEvidence(existing) { continue }
+
+            // Don't archive sessions whose process is still alive — two
+            // legitimate Claude instances can run in the same cwd concurrently.
+            if let pid = existing.pid, pid > 0,
+               Darwin.kill(pid_t(pid), 0) == 0 {
+                continue
+            }
+
+            idsToArchive.append(existingId)
+        }
+
+        for id in idsToArchive {
+            sessions.removeValue(forKey: id)
+            clearCodexSessionAliases(for: id)
+            cancelPendingSync(sessionId: id)
+            cancelPendingCodexPlaceholderPrune(sessionId: id)
+            cancelPendingQoderConversationPoll(sessionId: id)
+        }
+    }
+
+    /// Periodically check active Claude sessions whose bridge process has died without
+    /// sending a Stop event (crash, SIGKILL, terminal closed). End them so the bar
+    /// doesn't keep showing dead sessions as still working.
+    func pruneOrphanedSessions() {
+        for (sessionId, var session) in sessions {
+            guard session.provider == .claude else { continue }
+            guard session.ingress != .nativeRuntime else { continue }
+            guard session.phase != .ended else { continue }
+            guard !session.needsManualAttention else { continue }
+
+            let idleSeconds = Date().timeIntervalSince(session.lastActivity)
+            guard idleSeconds >= 30 else { continue }
+
+            if let pid = session.pid, pid > 0 {
+                if Darwin.kill(pid_t(pid), 0) != 0 && errno == ESRCH {
+                    markSessionEnded(&session)
+                    sessions[sessionId] = session
+                }
+            } else if session.phase.isActive, !sessionHasLiveExecutionEvidence(session) {
+                // No PID available but session looks idle with no live evidence.
+                // Transition from processing/compacting to idle so it doesn't
+                // appear stuck as "working" indefinitely.
+                if session.phase.canTransition(to: .idle) {
+                    session.phase = .idle
+                    sessions[sessionId] = session
+                }
+            }
         }
     }
 
