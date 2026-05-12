@@ -141,6 +141,15 @@ struct ClosedNotchUsageAvailability: Equatable {
 }
 
 enum AccessibilityPermissionStatus {
+#if APP_STORE
+    static let isAvailable = false
+
+    static func isTrusted(prompt: Bool = false) -> Bool {
+        false
+    }
+#else
+    static let isAvailable = true
+
     static func isTrusted(prompt: Bool = false) -> Bool {
         let options = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt
@@ -148,6 +157,7 @@ enum AccessibilityPermissionStatus {
 
         return AXIsProcessTrustedWithOptions(options)
     }
+#endif
 }
 
 @MainActor
@@ -238,6 +248,11 @@ final class SettingsPanelViewModel: ObservableObject {
     }
 
     func refreshAccessibilityStatus() {
+        guard AccessibilityPermissionStatus.isAvailable else {
+            accessibilityEnabled = false
+            return
+        }
+
         accessibilityEnabled = accessibilityStatusProvider(false)
     }
 
@@ -452,6 +467,11 @@ final class SettingsPanelViewModel: ObservableObject {
     }
 
     func openAccessibilitySettings() {
+        guard AccessibilityPermissionStatus.isAvailable else {
+            accessibilityEnabled = false
+            return
+        }
+
         accessibilityEnabled = accessibilityStatusProvider(true)
         if !accessibilityEnabled {
             accessibilitySettingsOpener()
@@ -1566,6 +1586,7 @@ private struct SettingsPanelContentView: View {
                 )
             }
 
+#if !APP_STORE
             SettingsSectionCard(title: "系统权限") {
                 SettingsStatusLine(
                     title: "辅助功能",
@@ -1578,6 +1599,7 @@ private struct SettingsPanelContentView: View {
                     }
                 }
             }
+#endif
 
             Button(action: { showingUninstallAllHooksConfirmation = true }) {
                 HStack(spacing: 7) {

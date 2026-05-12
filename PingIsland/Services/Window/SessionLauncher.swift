@@ -6,7 +6,9 @@
 //
 
 import AppKit
+#if !APP_STORE
 import ApplicationServices
+#endif
 import CoreGraphics
 import Foundation
 import os.log
@@ -1075,6 +1077,9 @@ actor SessionLauncher {
 
     @MainActor
     private func restoreMiniaturizedWindows(for app: NSRunningApplication) {
+#if APP_STORE
+        Self.logger.debug("Skipping minimized-window restore for App Store build")
+#else
         guard AXIsProcessTrusted() else {
             Self.logger.debug("Skipping minimized-window restore for \(app.bundleIdentifier ?? "unknown", privacy: .public): accessibility not granted")
             return
@@ -1108,8 +1113,10 @@ actor SessionLauncher {
         if restoredWindowCount > 0 {
             Self.logger.debug("Restored \(restoredWindowCount, privacy: .public) minimized window(s) for \(app.bundleIdentifier ?? "unknown", privacy: .public)")
         }
+#endif
     }
 
+#if !APP_STORE
     @MainActor
     private static func isWindowMiniaturized(_ window: AXUIElement) -> Bool {
         var minimizedValue: CFTypeRef?
@@ -1127,6 +1134,7 @@ actor SessionLauncher {
 
         return false
     }
+#endif
 
     private func activateIDEChatSession(_ session: SessionState) async -> Bool {
         guard session.clientInfo.isQoderFamily else { return false }
@@ -1417,11 +1425,15 @@ actor SessionLauncher {
             }
         }
 
+#if APP_STORE
+        return false
+#else
         guard AXIsProcessTrusted() else {
             return false
         }
 
         return runningApps.contains { hasUsableAXWindow(forProcessIdentifier: $0.processIdentifier) }
+#endif
     }
 
     @MainActor
@@ -1468,6 +1480,7 @@ actor SessionLauncher {
         return false
     }
 
+#if !APP_STORE
     @MainActor
     private static func hasUsableAXWindow(forProcessIdentifier processIdentifier: pid_t) -> Bool {
         let appElement = AXUIElementCreateApplication(processIdentifier)
@@ -1511,5 +1524,6 @@ actor SessionLauncher {
 
         return unsafeBitCast(value, to: AXUIElement.self)
     }
+#endif
 
 }
