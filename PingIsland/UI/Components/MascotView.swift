@@ -382,6 +382,7 @@ extension MascotStatus {
 
 struct MascotView: View {
     @Environment(\.mascotAnimationsEnabled) private var mascotAnimationsEnabled
+    @ObservedObject private var energyGovernor = EnergyGovernor.shared
 
     let kind: MascotKind
     let status: MascotStatus
@@ -447,7 +448,8 @@ struct MascotView: View {
         if let animationTime {
             return animationTime
         }
-        return mascotAnimationsEnabled ? nil : 0
+        guard mascotAnimationsEnabled else { return 0 }
+        return energyGovernor.policy.animationLevel == .staticFrames ? 0 : nil
     }
 
     private func idleScene(time: TimeInterval?) -> some View {
@@ -489,15 +491,24 @@ struct MascotView: View {
     /// Optimized for battery life while maintaining smooth visual feedback
     private func adaptiveInterval(for mode: MascotRenderMode) -> TimeInterval {
         // Higher interval = lower FPS for better battery/thermal performance
-        switch mode {
+        let baseInterval = switch mode {
         case .idle:
-            return 0.10  // 10 FPS for idle (slow animation, maximum battery savings)
+            0.10  // 10 FPS for idle (slow animation, maximum battery savings)
         case .working:
-            return 0.033  // ~30 FPS for working state (smooth but efficient)
+            0.033  // ~30 FPS for working state (smooth but efficient)
         case .warning:
-            return 0.04   // 25 FPS for warning (noticeable but not excessive)
+            0.04   // 25 FPS for warning (noticeable but not excessive)
         case .dragging:
-            return 0.025  // 40 FPS for dragging (needs responsiveness)
+            0.025  // 40 FPS for dragging (needs responsiveness)
+        }
+
+        switch energyGovernor.policy.animationLevel {
+        case .full:
+            return baseInterval
+        case .reduced:
+            return baseInterval * 2.5
+        case .staticFrames:
+            return baseInterval
         }
     }
 
@@ -2021,16 +2032,31 @@ private struct FloatingZOverlay: View {
     let size: CGFloat
     var time: TimeInterval?
 
+    @ObservedObject private var energyGovernor = EnergyGovernor.shared
+
     // Higher interval = lower CPU usage for particle effect
     private static let updateInterval: TimeInterval = 0.08  // 12.5 FPS is sufficient for Z particles
 
     var body: some View {
         if let time {
             overlayBody(time: time)
+        } else if energyGovernor.policy.animationLevel == .staticFrames {
+            overlayBody(time: 0)
         } else {
-            TimelineView(.periodic(from: .now, by: Self.updateInterval)) { context in
+            TimelineView(.periodic(from: .now, by: effectiveUpdateInterval)) { context in
                 overlayBody(time: context.date.timeIntervalSinceReferenceDate)
             }
+        }
+    }
+
+    private var effectiveUpdateInterval: TimeInterval {
+        switch energyGovernor.policy.animationLevel {
+        case .full:
+            Self.updateInterval
+        case .reduced:
+            Self.updateInterval * 2.5
+        case .staticFrames:
+            Self.updateInterval
         }
     }
 
@@ -2097,16 +2123,31 @@ private struct AlertHalo: View {
     let size: CGFloat
     var time: TimeInterval?
 
+    @ObservedObject private var energyGovernor = EnergyGovernor.shared
+
     // Halo is a subtle glow effect - lower refresh rate is sufficient
     private static let updateInterval: TimeInterval = 0.10  // 10 FPS
 
     var body: some View {
         if let time {
             haloBody(time: time)
+        } else if energyGovernor.policy.animationLevel == .staticFrames {
+            haloBody(time: 0)
         } else {
-            TimelineView(.periodic(from: .now, by: Self.updateInterval)) { context in
+            TimelineView(.periodic(from: .now, by: effectiveUpdateInterval)) { context in
                 haloBody(time: context.date.timeIntervalSinceReferenceDate)
             }
+        }
+    }
+
+    private var effectiveUpdateInterval: TimeInterval {
+        switch energyGovernor.policy.animationLevel {
+        case .full:
+            Self.updateInterval
+        case .reduced:
+            Self.updateInterval * 2.5
+        case .staticFrames:
+            Self.updateInterval
         }
     }
 
@@ -2124,16 +2165,31 @@ private struct DragMotionOverlay: View {
     let size: CGFloat
     var time: TimeInterval?
 
+    @ObservedObject private var energyGovernor = EnergyGovernor.shared
+
     // Trail effect needs moderate refresh rate but can be optimized
     private static let updateInterval: TimeInterval = 0.05  // 20 FPS for smooth trail
 
     var body: some View {
         if let time {
             overlayBody(time: time)
+        } else if energyGovernor.policy.animationLevel == .staticFrames {
+            overlayBody(time: 0)
         } else {
-            TimelineView(.periodic(from: .now, by: Self.updateInterval)) { context in
+            TimelineView(.periodic(from: .now, by: effectiveUpdateInterval)) { context in
                 overlayBody(time: context.date.timeIntervalSinceReferenceDate)
             }
+        }
+    }
+
+    private var effectiveUpdateInterval: TimeInterval {
+        switch energyGovernor.policy.animationLevel {
+        case .full:
+            Self.updateInterval
+        case .reduced:
+            Self.updateInterval * 2.5
+        case .staticFrames:
+            Self.updateInterval
         }
     }
 

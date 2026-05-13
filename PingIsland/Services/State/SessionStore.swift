@@ -70,10 +70,13 @@ actor SessionStore {
     private let qoderConversationPollIntervalNs: UInt64 = 250_000_000
     private let qoderConversationPollTimeoutNs: UInt64 = 120_000_000_000
     private let qoderSubagentAssociationWindow: TimeInterval = 2 * 60
+    private let qoderConversationQuietPollIntervalNs: UInt64 = 2_000_000_000
     private let openClawConversationPollIntervalNs: UInt64 = 1_000_000_000
     private let openClawConversationPollTimeoutNs: UInt64 = 30_000_000_000
+    private let openClawConversationQuietPollIntervalNs: UInt64 = 5_000_000_000
     private let codeBuddyCLIQuestionPollIntervalNs: UInt64 = 150_000_000
     private let codeBuddyCLIQuestionPollTimeoutNs: UInt64 = 5_000_000_000
+    private let codeBuddyCLIQuestionQuietPollIntervalNs: UInt64 = 1_000_000_000
 
     /// Persisted session associations used to restore client routing across relaunches.
     private var persistedAssociations: [String: PersistedSessionAssociation] = [:]
@@ -2403,7 +2406,14 @@ actor SessionStore {
                     break
                 }
 
-                try? await Task.sleep(nanoseconds: self.qoderConversationPollIntervalNs)
+                guard let pollIntervalNs = await self.supplementalPollInterval(
+                    activeIntervalNs: self.qoderConversationPollIntervalNs,
+                    quietIntervalNs: self.qoderConversationQuietPollIntervalNs
+                ) else {
+                    break
+                }
+
+                try? await Task.sleep(nanoseconds: pollIntervalNs)
             }
 
             await self.finishQoderConversationPoll(sessionId: sessionId, pollID: pollID)
@@ -2477,7 +2487,14 @@ actor SessionStore {
                     break
                 }
 
-                try? await Task.sleep(nanoseconds: self.openClawConversationPollIntervalNs)
+                guard let pollIntervalNs = await self.supplementalPollInterval(
+                    activeIntervalNs: self.openClawConversationPollIntervalNs,
+                    quietIntervalNs: self.openClawConversationQuietPollIntervalNs
+                ) else {
+                    break
+                }
+
+                try? await Task.sleep(nanoseconds: pollIntervalNs)
             }
 
             await self.finishOpenClawConversationPoll(sessionId: sessionId, pollID: pollID)
@@ -2551,7 +2568,14 @@ actor SessionStore {
                     break
                 }
 
-                try? await Task.sleep(nanoseconds: self.codeBuddyCLIQuestionPollIntervalNs)
+                guard let pollIntervalNs = await self.supplementalPollInterval(
+                    activeIntervalNs: self.codeBuddyCLIQuestionPollIntervalNs,
+                    quietIntervalNs: self.codeBuddyCLIQuestionQuietPollIntervalNs
+                ) else {
+                    break
+                }
+
+                try? await Task.sleep(nanoseconds: pollIntervalNs)
             }
 
             await self.finishCodeBuddyCLIQuestionPoll(sessionId: sessionId, pollID: pollID)
@@ -2593,6 +2617,18 @@ actor SessionStore {
     private func finishCodeBuddyCLIQuestionPoll(sessionId: String, pollID: UUID) {
         guard pendingCodeBuddyCLIQuestionPolls[sessionId]?.id == pollID else { return }
         pendingCodeBuddyCLIQuestionPolls.removeValue(forKey: sessionId)
+    }
+
+    private func supplementalPollInterval(activeIntervalNs: UInt64, quietIntervalNs: UInt64) async -> UInt64? {
+        let energyState = await MainActor.run {
+            let policy = EnergyGovernor.shared.policy
+            return (
+                allowsFileWatcherRetry: policy.allowsFileWatcherRetry,
+                usesFullCadence: policy.animationLevel == .full
+            )
+        }
+        guard energyState.allowsFileWatcherRetry else { return nil }
+        return energyState.usesFullCadence ? activeIntervalNs : quietIntervalNs
     }
 
     private func scheduleCodexRolloutSync(

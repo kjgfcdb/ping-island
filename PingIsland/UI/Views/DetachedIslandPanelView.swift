@@ -981,24 +981,46 @@ private struct DetachedFloatingPetInteractionView: View {
 private struct DetachedFloatingUsageBoltView: View {
     let windows: [UsageSummaryWindow]
 
+    @ObservedObject private var energyGovernor = EnergyGovernor.shared
+
     private let cycleInterval: TimeInterval = 1.8
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { context in
-            if let window = window(for: context.date) {
-                let phase = context.date.timeIntervalSinceReferenceDate
-                let pulse = 1 + (sin(phase * .pi * 2 / 1.2) * 0.05)
-                let lift = sin(phase * .pi * 2 / 1.6) * 1.2
-
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 8, weight: .black))
-                    .foregroundColor(color(for: window.severity))
-                    .scaleEffect((window.severity == .critical ? 1.08 : 1) * pulse)
-                    .offset(y: lift)
-                    .id(window.id)
-                    .help(window.resetText ?? window.valueText)
-                    .accessibilityLabel(Text(accessibilityLabel(for: window)))
+        if energyGovernor.policy.animationLevel == .staticFrames {
+            boltBody(date: .now, isAnimated: false)
+        } else {
+            TimelineView(.periodic(from: .now, by: boltInterval)) { context in
+                boltBody(date: context.date, isAnimated: true)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func boltBody(date: Date, isAnimated: Bool) -> some View {
+        if let window = window(for: date) {
+            let phase = date.timeIntervalSinceReferenceDate
+            let pulse = isAnimated ? 1 + (sin(phase * .pi * 2 / 1.2) * 0.05) : 1
+            let lift = isAnimated ? sin(phase * .pi * 2 / 1.6) * 1.2 : 0
+
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 8, weight: .black))
+                .foregroundColor(color(for: window.severity))
+                .scaleEffect((window.severity == .critical ? 1.08 : 1) * pulse)
+                .offset(y: lift)
+                .id(window.id)
+                .help(window.resetText ?? window.valueText)
+                .accessibilityLabel(Text(accessibilityLabel(for: window)))
+        }
+    }
+
+    private var boltInterval: TimeInterval {
+        switch energyGovernor.policy.animationLevel {
+        case .full:
+            1.0 / 24.0
+        case .reduced:
+            1.0 / 8.0
+        case .staticFrames:
+            1.0 / 24.0
         }
     }
 
