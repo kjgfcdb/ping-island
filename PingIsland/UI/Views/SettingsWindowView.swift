@@ -557,8 +557,13 @@ final class SettingsPanelViewModel: ObservableObject {
     private func hookConfigurationDirectoryURL(for profile: ManagedHookClientProfile) -> URL? {
         let fileManager = FileManager.default
 
-        if let existingConfiguration = profile.configurationURLs.first(where: { fileManager.fileExists(atPath: $0.path) }) {
-            return existingConfiguration.deletingLastPathComponent()
+        for configurationURL in profile.configurationURLs {
+            var isDirectory = ObjCBool(false)
+            guard fileManager.fileExists(atPath: configurationURL.path, isDirectory: &isDirectory) else {
+                continue
+            }
+
+            return isDirectory.boolValue ? configurationURL : configurationURL.deletingLastPathComponent()
         }
 
         if let existingDirectory = profile.configurationURLs
