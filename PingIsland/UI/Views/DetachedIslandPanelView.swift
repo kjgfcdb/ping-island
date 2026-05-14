@@ -36,6 +36,7 @@ enum DetachedIslandPanelMetrics {
     static let bubbleTailOverlap: CGFloat = 7
     static let bubbleTailInset: CGFloat = 4
     static let bubbleCornerRadius: CGFloat = 22
+    static let bubbleRenderInset: CGFloat = 1.5
     static let bubbleWindowGutter: CGFloat = 2
     static let bubbleHorizontalPadding: CGFloat = 6
     static let bubbleVerticalPadding: CGFloat = 4
@@ -1169,7 +1170,6 @@ private struct DetachedIslandBubbleChrome<Content: View>: View {
             .background(
                 shape.fill(Color.black)
             )
-            .clipShape(shape)
     }
 }
 
@@ -1177,10 +1177,19 @@ struct DetachedIslandBubbleShape: Shape {
     let placement: DetachedIslandBubblePlacement
 
     func path(in rect: CGRect) -> Path {
+        let renderInset = min(
+            DetachedIslandPanelMetrics.bubbleRenderInset,
+            max(0, min(rect.width, rect.height) / 2)
+        )
+        let drawingRect = rect.insetBy(dx: renderInset, dy: renderInset)
+        guard drawingRect.width > 0, drawingRect.height > 0 else {
+            return Path()
+        }
+
         let radius = min(
             DetachedIslandPanelMetrics.bubbleCornerRadius,
-            min(rect.width, rect.height) / 2
+            min(drawingRect.width, drawingRect.height) / 2
         )
-        return Path(roundedRect: rect, cornerRadius: radius)
+        return Path(roundedRect: drawingRect, cornerRadius: radius)
     }
 }
