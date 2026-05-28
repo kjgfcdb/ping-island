@@ -1358,7 +1358,6 @@ private struct SettingsPanelContentView: View {
         .background(panelBackgroundColor)
         .ignoresSafeArea()
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(color: Color.black.opacity(0.22), radius: 30, y: 18)
         .preferredColorScheme(.dark)
         .environment(\.mascotAnimationsEnabled, arePreviewAnimationsActive)
         .onAppear {
