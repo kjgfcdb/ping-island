@@ -661,7 +661,7 @@ private struct SoundSettingsContent: View {
     @ObservedObject private var soundPacks = SoundPackCatalog.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
             SettingsSectionCard(title: "通知") {
                 SettingsToggleLine(
                     title: "启用提示音",
@@ -684,13 +684,14 @@ private struct SoundSettingsContent: View {
                     value: $settings.soundVolume,
                     range: 0...1,
                     step: 0.05,
-                    format: { "\(Int(($0 * 100).rounded()))%" }
+                    format: { "\(Int(($0 * 100).rounded()))%" },
+                    showsTickMarks: true
                 )
             }
 
             if settings.soundThemeMode == .builtIn {
-                SettingsSectionCard(title: "阶段音效") {
-                    ForEach(NotificationEvent.allCases) { event in
+                SoundEventSection(title: "阶段音效") {
+                    ForEach(Array(NotificationEvent.allCases.enumerated()), id: \.element.id) { index, event in
                         SoundEventSettingsLine(
                             event: event,
                             isEnabled: soundEnabledBinding(for: event),
@@ -698,30 +699,31 @@ private struct SoundSettingsContent: View {
                         ) {
                             AppSettings.playSound(for: event)
                         }
+
+                        if index < NotificationEvent.allCases.count - 1 {
+                            SettingsLineDivider()
+                        }
                     }
                 }
             } else if settings.soundThemeMode == .island8Bit {
                 SettingsSectionCard(title: "客户端启动音") {
-                    SettingsActionLine(
-                        title: "固定启动音",
-                        subtitle: "使用内置 8-bit 启动旋律。应用启动时会自动播放，也可以在这里试听。"
-                    ) {
+                    SoundStartupLine {
                         AppSettings.playClientStartupSound()
-                    } accessory: {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.72))
                     }
                 }
 
-                SettingsSectionCard(title: "阶段音效") {
-                    ForEach(NotificationEvent.allCases) { event in
+                SoundEventSection(title: "阶段音效") {
+                    ForEach(Array(NotificationEvent.allCases.enumerated()), id: \.element.id) { index, event in
                         BundledSoundEventLine(
                             event: event,
                             isEnabled: soundEnabledBinding(for: event),
                             selectedSound: bundledSoundBinding(for: event)
                         ) {
                             AppSettings.playSound(for: event)
+                        }
+
+                        if index < NotificationEvent.allCases.count - 1 {
+                            SettingsLineDivider()
                         }
                     }
                 }
@@ -748,8 +750,8 @@ private struct SoundSettingsContent: View {
                     }
                 }
 
-                SettingsSectionCard(title: "阶段映射") {
-                    ForEach(NotificationEvent.allCases) { event in
+                SoundEventSection(title: "阶段映射") {
+                    ForEach(Array(NotificationEvent.allCases.enumerated()), id: \.element.id) { index, event in
                         SoundPackEventLine(
                             event: event,
                             isEnabled: Binding(
@@ -758,6 +760,10 @@ private struct SoundSettingsContent: View {
                             )
                         ) {
                             AppSettings.playSound(for: event)
+                        }
+
+                        if index < NotificationEvent.allCases.count - 1 {
+                            SettingsLineDivider()
                         }
                     }
                 }
@@ -5310,6 +5316,7 @@ private struct SettingsSliderLine: View {
     let range: ClosedRange<Double>
     let step: Double
     let format: (Double) -> String
+    var showsTickMarks = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -5334,6 +5341,24 @@ private struct SettingsSliderLine: View {
 
             Slider(value: $value, in: range, step: step)
                 .tint(TerminalColors.blue)
+
+            if showsTickMarks {
+                HStack(spacing: 0) {
+                    ForEach(0..<17, id: \.self) { _ in
+                        Capsule()
+                            .fill(Color.white.opacity(0.28))
+                            .frame(width: 1, height: 6)
+
+                        Spacer(minLength: 0)
+                    }
+
+                    Capsule()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(width: 1, height: 6)
+                }
+                .padding(.horizontal, 6)
+                .padding(.top, -7)
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -6189,6 +6214,129 @@ private struct SettingsStatusLine: View {
     }
 }
 
+private struct SoundEventSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        SettingsSectionCard(title: title) {
+            VStack(spacing: 0) {
+                content
+            }
+        }
+    }
+}
+
+private struct SoundStartupLine: View {
+    let preview: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.96, green: 0.63, blue: 0.22),
+                                Color(red: 0.62, green: 0.35, blue: 0.12)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                Image(systemName: "music.note")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.92))
+            }
+            .frame(width: 48, height: 48)
+            .shadow(color: Color(red: 0.96, green: 0.48, blue: 0.12).opacity(0.24), radius: 14, y: 7)
+
+            SoundEventTextBlock(
+                title: "固定启动音",
+                subtitle: "使用内置 8-bit 启动旋律。应用启动时会自动播放，也可以在这里试听。"
+            )
+
+            Spacer(minLength: 14)
+
+            SoundPreviewButton(isEnabled: true, action: preview)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SoundEventTextBlock: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(appLocalized: title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white.opacity(0.94))
+                .lineLimit(1)
+                .minimumScaleFactor(0.88)
+
+            Text(appLocalized: subtitle)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.58))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
+    }
+}
+
+private struct SoundPreviewButton: View {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.white.opacity(isEnabled ? 0.86 : 0.32))
+                .offset(x: 1)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle()
+                        .fill(Color.white.opacity(isEnabled ? 0.075 : 0.025))
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color.white.opacity(isEnabled ? 0.13 : 0.05), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .help("试听")
+    }
+}
+
+private struct SoundControlCluster<PickerContent: View>: View {
+    @Binding var isEnabled: Bool
+    let pickerWidth: CGFloat
+    let preview: () -> Void
+    @ViewBuilder let picker: PickerContent
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Toggle("", isOn: $isEnabled)
+                .labelsHidden()
+                .settingsCompactSwitch(scale: 0.88)
+
+            picker
+                .settingsMenuPicker(width: pickerWidth)
+                .disabled(!isEnabled)
+
+            SoundPreviewButton(isEnabled: isEnabled, action: preview)
+        }
+        .frame(width: pickerWidth + 98, alignment: .trailing)
+    }
+}
+
 private struct SoundEventSettingsLine: View {
     let event: NotificationEvent
     @Binding var isEnabled: Bool
@@ -6196,52 +6344,18 @@ private struct SoundEventSettingsLine: View {
     let preview: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 16) {
-                Text(appLocalized: event.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(1)
+        HStack(alignment: .center, spacing: 18) {
+            SoundEventTextBlock(title: event.title, subtitle: event.subtitle)
 
-                Spacer(minLength: 12)
-
-                HStack(alignment: .center, spacing: 8) {
-                    Toggle("", isOn: $isEnabled)
-                        .labelsHidden()
-                        .settingsCompactSwitch()
-
-                    Picker(event.title, selection: $selectedSound) {
-                        ForEach(NotificationSound.allCases, id: \.self) { sound in
-                            Text(sound.rawValue).tag(sound)
-                        }
+            SoundControlCluster(isEnabled: $isEnabled, pickerWidth: 174, preview: preview) {
+                Picker(event.title, selection: $selectedSound) {
+                    ForEach(NotificationSound.allCases, id: \.self) { sound in
+                        Text(sound.rawValue).tag(sound)
                     }
-                    .id(selectedSound)
-                    .labelsHidden()
-                    .settingsMenuPicker(width: 148)
-                    .disabled(!isEnabled)
-
-                    Button(action: preview) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white.opacity(isEnabled ? 0.82 : 0.4))
-                            .frame(width: 26, height: 26)
-                            .background(
-                                Circle()
-                                    .fill(Color.white.opacity(isEnabled ? 0.08 : 0.03))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!isEnabled)
                 }
+                .id(selectedSound)
+                .labelsHidden()
             }
-
-            Text(appLocalized: event.subtitle)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.58))
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -6258,46 +6372,25 @@ private struct SoundPackEventLine: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 16) {
-                Text(appLocalized: event.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                SoundEventTextBlock(title: event.title, subtitle: event.subtitle)
+
+                Text(categorySummary)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.38))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(1)
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 8) {
-                    Toggle("", isOn: $isEnabled)
-                        .labelsHidden()
-                        .settingsCompactSwitch()
-
-                    Button(action: preview) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white.opacity(isEnabled ? 0.82 : 0.4))
-                            .frame(width: 26, height: 26)
-                            .background(
-                                Circle()
-                                    .fill(Color.white.opacity(isEnabled ? 0.08 : 0.03))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!isEnabled)
-                }
+                    .truncationMode(.middle)
             }
+            .layoutPriority(1)
 
-            Text(appLocalized: event.subtitle)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.58))
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
+            HStack(spacing: 12) {
+                Toggle("", isOn: $isEnabled)
+                    .labelsHidden()
+                    .settingsCompactSwitch(scale: 0.88)
 
-            Text(categorySummary)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundColor(.white.opacity(0.42))
+                SoundPreviewButton(isEnabled: isEnabled, action: preview)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -6311,52 +6404,18 @@ private struct BundledSoundEventLine: View {
     let preview: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 16) {
-                Text(appLocalized: event.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(1)
+        HStack(alignment: .center, spacing: 18) {
+            SoundEventTextBlock(title: event.title, subtitle: event.subtitle)
 
-                Spacer(minLength: 12)
-
-                HStack(alignment: .center, spacing: 8) {
-                    Toggle("", isOn: $isEnabled)
-                        .labelsHidden()
-                        .settingsCompactSwitch()
-
-                    Picker(event.title, selection: $selectedSound) {
-                        ForEach(Island8BitSound.allOrdered) { sound in
-                            Text(sound.label).tag(sound)
-                        }
+            SoundControlCluster(isEnabled: $isEnabled, pickerWidth: 174, preview: preview) {
+                Picker(event.title, selection: $selectedSound) {
+                    ForEach(Island8BitSound.allOrdered) { sound in
+                        Text(sound.label).tag(sound)
                     }
-                    .id(selectedSound)
-                    .labelsHidden()
-                    .settingsMenuPicker(width: 148)
-                    .disabled(!isEnabled)
-
-                    Button(action: preview) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white.opacity(isEnabled ? 0.82 : 0.4))
-                            .frame(width: 26, height: 26)
-                            .background(
-                                Circle()
-                                    .fill(Color.white.opacity(isEnabled ? 0.08 : 0.03))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!isEnabled)
                 }
+                .id(selectedSound)
+                .labelsHidden()
             }
-
-            Text(appLocalized: event.subtitle)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.58))
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
