@@ -724,10 +724,13 @@ private extension BridgeEnvelope {
             metadata["origin"],
             metadata["_source"]
         )
-        let explicitOriginator = firstNonEmpty(
+        let explicitMetadataOriginator = firstNonEmpty(
             metadata["client_originator"],
             metadata["originator"],
-            metadata["source_title"],
+            metadata["source_title"]
+        )
+        let explicitOriginator = firstNonEmpty(
+            explicitMetadataOriginator,
             terminalContext.ideName
         )
         let explicitThreadSource = firstNonEmpty(
@@ -757,12 +760,12 @@ private extension BridgeEnvelope {
             metadata["source_process_name"],
             metadata["process_name"]
         )
-        let hostBundleIdentifier = (explicitBundleID ?? terminalBundleID)?
+        let explicitClientBundleIdentifier = explicitBundleID?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         let effectiveExplicitKind: String?
         let effectiveExplicitName: String?
-        switch hostBundleIdentifier {
+        switch explicitClientBundleIdentifier {
         case "com.qoder.ide":
             effectiveExplicitKind = "qoder"
             effectiveExplicitName = "Qoder"
@@ -780,9 +783,11 @@ private extension BridgeEnvelope {
             explicitKind: effectiveExplicitKind,
             explicitName: effectiveExplicitName,
             explicitBundleIdentifier: explicitBundleID,
-            terminalBundleIdentifier: terminalBundleID,
+            terminalBundleIdentifier: explicitKind == nil && explicitName == nil && explicitBundleID == nil
+                ? nil
+                : terminalBundleID,
             origin: explicitOrigin,
-            originator: explicitOriginator,
+            originator: explicitMetadataOriginator,
             threadSource: explicitThreadSource,
             processName: processName
         )
