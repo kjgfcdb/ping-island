@@ -178,6 +178,26 @@ final class NotchViewModelTests: XCTestCase {
         }
     }
 
+    func testPublishedNotchModuleWidthValueAppliesWithoutWaitingForProviderRefresh() async {
+        await MainActor.run {
+            let viewModel = NotchViewModel(
+                deviceNotchRect: CGRect(x: 0, y: 0, width: 224, height: 38),
+                screenRect: CGRect(x: 0, y: 0, width: 2560, height: 1440),
+                windowHeight: 320,
+                hasPhysicalNotch: false,
+                enableEventMonitoring: false,
+                observeSystemEnvironment: false,
+                fullscreenActivityProvider: { _ in false },
+                notchModuleWidthProvider: { 266 }
+            )
+
+            viewModel.syncClosedWidthForTesting(preferredModuleWidth: 128)
+
+            XCTAssertEqual(viewModel.closedWidth, 128)
+            XCTAssertEqual(viewModel.openedSize.width, 520)
+        }
+    }
+
     func testMinimumNotchModuleWidthSupportsIconOnlyExternalDisplayClosedWidth() async {
         await MainActor.run {
             let viewModel = NotchViewModel(

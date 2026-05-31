@@ -2802,8 +2802,8 @@ private struct SettingsPanelContentView: View {
                     NotchDisplayModeSelector(mode: $settings.notchDisplayMode)
                     SettingsLineDivider()
                     SettingsSliderLine(
-                        title: "刘海模块宽度",
-                        subtitle: "调窄外接显示器上的闭合态刘海宽度；较窄时会降级为单图标显示，内置刘海屏会保留系统刘海所需的最小宽度。",
+                        title: "静默状态宽度",
+                        subtitle: "调整无展开面板时的刘海宽度；较窄时会降级为单图标显示，不影响点击或 hover 后的展开面板宽度。",
                         value: $settings.notchModuleWidth,
                         range: AppSettings.notchModuleWidthRange,
                         step: 4,

@@ -103,11 +103,11 @@ class NotchViewModel: ObservableObject {
         return systemHeight > 0 ? systemHeight : Self.defaultClosedHeight
     }
 
-    private var resolvedClosedWidth: CGFloat {
+    private func resolvedClosedWidth(preferredModuleWidthOverride: CGFloat? = nil) -> CGFloat {
         Self.resolvedClosedWidth(
             deviceNotchRect: deviceNotchRect,
             hasPhysicalNotch: hasPhysicalNotch,
-            preferredModuleWidth: preferredModuleWidth
+            preferredModuleWidth: preferredModuleWidthOverride ?? preferredModuleWidth
         )
     }
 
@@ -159,7 +159,7 @@ class NotchViewModel: ObservableObject {
             && autoCollapseOnLeave
     }
 
-    private var narrowedClosedWidth: CGFloat {
+    private func narrowedClosedWidth(for baseWidth: CGFloat) -> CGFloat {
         if hasPhysicalNotch {
             let systemWidth = ceil(deviceNotchRect.width)
             if systemWidth > 0 {
@@ -167,18 +167,18 @@ class NotchViewModel: ObservableObject {
             }
         }
 
-        let baseWidth = resolvedClosedWidth
         return max(
             baseWidth * Self.detachmentLongPressNarrowedWidthScale,
             baseWidth - Self.detachmentLongPressMaximumShrink
         )
     }
 
-    private var dockedClosedWidthTarget: CGFloat {
+    private func dockedClosedWidthTarget(preferredModuleWidthOverride: CGFloat? = nil) -> CGFloat {
+        let baseWidth = resolvedClosedWidth(preferredModuleWidthOverride: preferredModuleWidthOverride)
         guard presentationMode == .docked, detachmentTracking != nil else {
-            return resolvedClosedWidth
+            return baseWidth
         }
-        return narrowedClosedWidth
+        return narrowedClosedWidth(for: baseWidth)
     }
 
     /// Dynamic opened size based on content type
@@ -439,8 +439,12 @@ class NotchViewModel: ObservableObject {
             .store(in: &cancellables)
 
         AppSettings.shared.$notchModuleWidth
-            .sink { [weak self] _ in
-                self?.syncClosedWidth(animated: true)
+            .sink { [weak self] width in
+                self?.syncClosedWidth(
+                    animated: true,
+                    animation: .easeOut(duration: 0.12),
+                    preferredModuleWidth: width
+                )
             }
             .store(in: &cancellables)
     }
@@ -1010,9 +1014,14 @@ class NotchViewModel: ObservableObject {
 
     private func syncClosedWidth(
         animated: Bool,
-        animation: Animation? = nil
+        animation: Animation? = nil,
+        preferredModuleWidth: Double? = nil
     ) {
-        let targetWidth = dockedClosedWidthTarget
+        let targetWidth = dockedClosedWidthTarget(
+            preferredModuleWidthOverride: preferredModuleWidth.map {
+                CGFloat(AppSettingsStore.normalizedNotchModuleWidth($0))
+            }
+        )
         guard closedWidth != targetWidth else { return }
 
         if animated, let animation {
@@ -1034,6 +1043,10 @@ class NotchViewModel: ObservableObject {
 
     func cancelDockedDetachmentTrackingForTesting() {
         cancelDockedDetachmentTracking()
+    }
+
+    func syncClosedWidthForTesting(preferredModuleWidth: Double) {
+        syncClosedWidth(animated: false, preferredModuleWidth: preferredModuleWidth)
     }
 #endif
 }
