@@ -84,6 +84,48 @@ enum NotificationSound: String, CaseIterable {
     }
 }
 
+final class SoundPlaybackCoordinator {
+    private var activeSound: NSSound?
+
+    @discardableResult
+    func play(_ sound: NSSound, volume: Float) -> Bool {
+        stopActiveSound(except: sound)
+
+        if isActiveSound(sound), sound.isPlaying {
+            sound.stop()
+        }
+
+        sound.volume = volume
+        let didPlay = sound.play()
+        activeSound = didPlay ? sound : nil
+        return didPlay
+    }
+
+    func clearIfActive(_ sound: NSSound) {
+        guard isActiveSound(sound) else { return }
+        activeSound = nil
+    }
+
+    private func stopActiveSound(except sound: NSSound) {
+        guard let activeSound, !isSameSound(activeSound, sound) else { return }
+        if activeSound.isPlaying {
+            activeSound.stop()
+        }
+        self.activeSound = nil
+    }
+
+    private func isActiveSound(_ sound: NSSound) -> Bool {
+        guard let activeSound else { return false }
+        return isSameSound(activeSound, sound)
+    }
+
+    private func isSameSound(_ lhs: NSSound, _ rhs: NSSound) -> Bool { lhs === rhs }
+}
+
+enum AppSoundPlayback {
+    static let shared = SoundPlaybackCoordinator()
+}
+
 enum UsageValueMode: String, CaseIterable, Identifiable {
     case used
     case remaining
@@ -1809,8 +1851,7 @@ enum AppSettings {
     static func playSound(named soundName: String?) {
         guard soundEnabled, let soundName else { return }
         guard let sound = NSSound(named: NSSound.Name(soundName)) else { return }
-        sound.volume = Float(soundVolume)
-        sound.play()
+        AppSoundPlayback.shared.play(sound, volume: Float(soundVolume))
     }
 
     static func playClientStartupSound() {
@@ -1860,11 +1901,7 @@ enum AppSettings {
         }
 
         bundledSoundCache[resourceName] = sound
-        if sound.isPlaying {
-            sound.stop()
-        }
-        sound.volume = Float(soundVolume)
-        sound.play()
+        AppSoundPlayback.shared.play(sound, volume: Float(soundVolume))
     }
 
     private static func loadBundledSound(named resourceName: String) -> NSSound? {
